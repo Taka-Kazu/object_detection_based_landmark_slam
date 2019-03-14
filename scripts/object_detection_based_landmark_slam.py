@@ -1,16 +1,19 @@
 #!/usr/bin/env python
 #! coding:utf-8
+
 import numpy as np
 import math
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-# EKF state covariance
-Cx = np.diag([0.5, 0.5, np.deg2rad(30.0)])**2
+import ros
 
-#  Simulation parameter
-Qsim = np.diag([0.2, np.deg2rad(1.0)])**2
-Rsim = np.diag([1.0, np.deg2rad(10.0)])**2
+# EKF state covariance
+Q = np.diag([0.5, 0.5, np.deg2rad(30.0)])**2
+
+# Simulation parameter
+observation_noise = np.diag([0.2, np.deg2rad(1.0)])**2 # landmark observation noise
+Rsim = np.diag([1.0, np.deg2rad(10.0)])**2 # input noise
 
 DT = 0.1  # time tick [s]
 SIM_TIME = 50.0  # simulation time [s]
@@ -23,6 +26,9 @@ CHI_2 = 9.21934 # X^2, 99%
 
 show_animation = True
 
+class ObjectDetectionBasedLandmarkSLAM:
+    def __init__(self):
+        self.hoge = 0
 
 def ekf_slam(xEst, PEst, u, z):
 
@@ -30,7 +36,8 @@ def ekf_slam(xEst, PEst, u, z):
     S = STATE_SIZE
     xEst[0:S] = motion_model(xEst[0:S], u)
     G, Fx = jacob_motion(xEst[0:S], u)
-    PEst[0:S, 0:S] = G.T * PEst[0:S, 0:S] * G + Fx.T * Cx * Fx
+    #PEst[0:S, 0:S] = G.T * PEst[0:S, 0:S] * G + Fx.T * Q * Fx
+    PEst[0:S, 0:S] = Fx * PEst[0:S, 0:S] * Fx.T + G * Q * G.T
     initP = np.eye(2)
 
     # Update
@@ -50,7 +57,7 @@ def ekf_slam(xEst, PEst, u, z):
         lm = get_LM_Pos_from_state(xEst, minid)
         y, S, H = calc_innovation(lm, xEst, PEst, z[iz, 0:2], minid)
 
-        K = np.dot(np.dot(PEst, H.T) ,np.linalg.inv(S))
+        K = np.dot(np.dot(PEst, H.T), np.linalg.inv(S))
         xEst = xEst + np.dot(K, y)
         PEst = np.dot((np.eye(len(xEst)) - np.dot(K, H)), PEst)
 
@@ -83,8 +90,8 @@ def observation(xTrue, xd, u, RFID):
         if d <= MAX_RANGE:
             # recognition probablirity
             if np.random.rand(1) > 0.70:
-                dn = d + np.random.randn() * Qsim[0, 0]  # add noise
-                anglen = angle + np.random.randn() * Qsim[1, 1]  # add noise
+                dn = d + np.random.randn() * observation_noise[0, 0]  # add noise
+                anglen = angle + np.random.randn() * observation_noise[1, 1]  # add noise
                 zi = np.array([dn, anglen, i])
                 z = np.vstack((z, zi))
 
@@ -135,8 +142,6 @@ def calc_LM_Pos(x, z):
 
     zp[0, 0] = x[0, 0] + z[0] * math.cos(x[2, 0] + z[1])
     zp[1, 0] = x[1, 0] + z[0] * math.sin(x[2, 0] + z[1])
-    #zp[0, 0] = x[0, 0] + z[0, 0] * math.cos(x[2, 0] + z[0, 1])
-    #zp[1, 0] = x[1, 0] + z[0, 0] * math.sin(x[2, 0] + z[0, 1])
 
     return zp
 
@@ -172,13 +177,12 @@ def search_correspond_LM_ID(xAug, PAug, zi):
 def calc_innovation(lm, xEst, PEst, z, LMid):
     delta = lm - xEst[0:2]
     q = np.dot(delta.T, delta)[0, 0]
-    #zangle = math.atan2(delta[1], delta[0]) - xEst[2]
     zangle = math.atan2(delta[1, 0], delta[0, 0]) - xEst[2, 0]
     zp = np.array([[math.sqrt(q), pi_2_pi(zangle)]])
     y = (z - zp).T
     y[1] = pi_2_pi(y[1])
     H = jacobH(q, delta, xEst, LMid + 1)
-    S = np.dot(np.dot(H, PEst), H.T) + Cx[0:2, 0:2]
+    S = np.dot(np.dot(H, PEst), H.T) + Q[0:2, 0:2]
 
     return y, S, H
 
