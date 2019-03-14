@@ -37,7 +37,7 @@ def ekf_slam(xEst, PEst, u, z):
     xEst[0:S] = motion_model(xEst[0:S], u)
     G, Fx = jacob_motion(xEst[0:S], u)
     #PEst[0:S, 0:S] = G.T * PEst[0:S, 0:S] * G + Fx.T * Q * Fx
-    PEst[0:S, 0:S] = Fx * PEst[0:S, 0:S] * Fx.T + G * Q * G.T
+    PEst[0:S, 0:S] = np.dot(np.dot(Fx, PEst[0:S, 0:S]), Fx.T) + np.dot(np.dot(G, Q), G.T)
     initP = np.eye(2)
 
     # Update
@@ -132,7 +132,7 @@ def jacob_motion(x, u):
                    [0.0, 0.0, DT * u[0] * math.cos(x[2, 0])],
                    [0.0, 0.0, 0.0]])
 
-    G = np.eye(STATE_SIZE) + Fx.T * jF * Fx
+    G = np.eye(STATE_SIZE) + np.dot(np.dot(Fx.T, jF), Fx)
 
     return G, Fx,
 
@@ -179,6 +179,7 @@ def calc_innovation(lm, xEst, PEst, z, LMid):
     q = np.dot(delta.T, delta)[0, 0]
     zangle = math.atan2(delta[1, 0], delta[0, 0]) - xEst[2, 0]
     zp = np.array([[math.sqrt(q), pi_2_pi(zangle)]])
+    # error in polar coordinates
     y = (z - zp).T
     y[1] = pi_2_pi(y[1])
     H = jacobH(q, delta, xEst, LMid + 1)
