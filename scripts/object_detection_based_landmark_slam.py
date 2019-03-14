@@ -37,7 +37,8 @@ def ekf_slam(xEst, PEst, u, z):
     xEst[0:S] = motion_model(xEst[0:S], u)
     G, Fx = jacob_motion(xEst[0:S], u)
     #PEst[0:S, 0:S] = G.T * PEst[0:S, 0:S] * G + Fx.T * Q * Fx
-    PEst[0:S, 0:S] = np.dot(np.dot(Fx, PEst[0:S, 0:S]), Fx.T) + np.dot(np.dot(G, Q), G.T)
+    #PEst[0:S, 0:S] = np.dot(np.dot(Fx, PEst[0:S, 0:S]), Fx.T) + np.dot(np.dot(G, Q), G.T)
+    PEst[0:S, 0:S] = np.dot(np.dot(Fx, PEst[0:S, 0:S]), Fx.T) + Q# + np.dot(np.dot(G, Q), G.T)
     initP = np.eye(2)
 
     # Update
@@ -175,11 +176,15 @@ def search_correspond_LM_ID(xAug, PAug, zi):
 
 
 def calc_innovation(lm, xEst, PEst, z, LMid):
+    # dx, dy
     delta = lm - xEst[0:2]
+    # distance^2
     q = np.dot(delta.T, delta)[0, 0]
+    # angle in robot frame
     zangle = math.atan2(delta[1, 0], delta[0, 0]) - xEst[2, 0]
+    # polar coordinates
     zp = np.array([[math.sqrt(q), pi_2_pi(zangle)]])
-    # error in polar coordinates
+    # error in polar coordinates (estimated pose - observed pose)
     y = (z - zp).T
     y[1] = pi_2_pi(y[1])
     H = jacobH(q, delta, xEst, LMid + 1)
@@ -189,7 +194,10 @@ def calc_innovation(lm, xEst, PEst, z, LMid):
 
 
 def jacobH(q, delta, x, i):
+    # distance
     sq = math.sqrt(q)
+    # -d*dx, -d*dy, 0, d*dx, d*dy
+    # dy, -dx, -1, -dy, dx
     G = np.array([[-sq * delta[0, 0], - sq * delta[1, 0], 0, sq * delta[0, 0], sq * delta[1, 0]],
                   [delta[1, 0], - delta[0, 0], - 1.0, - delta[1, 0], delta[0, 0]]])
 
