@@ -6,7 +6,10 @@ import math
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-import ros
+import rospy
+import tf
+from nav_msgs.msg import Odometry
+import message_filters
 
 np.set_printoptions(linewidth=200)
 
@@ -30,7 +33,147 @@ show_animation = True
 
 class ObjectDetectionBasedLandmarkSLAM:
     def __init__(self):
-        self.hoge = 0
+        self.Q = np.diag([0.5, 0.5, np.deg2grad(30.0)])**2
+        self.OBSERVATION_NOISE = np.diag([0.2, np.deg2rad(1.0)])**2 # landmark observation noise
+        self.R = np.diag([1.0, np.deg2rad(10.0)])**2 # input noise
+        self.MAX_RANGE = 10.0
+        self.LIMIT_MAHALANOBIS_DISTANCE = 2.0
+        self.ROBOT_STATE_SIZE = 3 # x, y, yaw
+        self.LANDMARK_STATE_SIZE = 2 # x, y
+
+        self.odom_sub = rospy.Subscriber('/odometry', Odometry, self.odom_callback, queue_size=1)
+        #self.odom_sub = message_filter.Subscriber('/odometry', Odometry)
+        #mf = message_filters.TimeSynchronizer([odom_sub], 10)
+
+        rospy.init_node('object_detection_based_landmark_slam')
+
+        self.last_time = rospy.get_time()
+        self.first_flag = True
+
+        rospy.spin()
+
+    def move(self, x, u, dt):
+        F = np.array([[1.0, 0, 0],
+                      [0, 1.0, 0],
+                      [0, 0, 1.0]])
+
+        B = np.array([[dt * math.cos(x[2, 0]), 0],
+                      [dt * math.sin(x[2, 0]), 0],
+                      [0.0, dt]])
+
+        x = np.dot(F, x) + np.dot(B, u)
+        return x
+
+    def ekf_slam(self, x_est, p_est, u, z, dt):
+        # Predict
+        S = self.ROBOT_STATE_SIZE
+        x_est[0:S] = move(x_est[0:S], u, dt)
+        jf = get_jacobian_f(x_est[0:S], u, dt)
+        p_est[0:S, 0:S] = np.dot(np.dot(jf, p_est[0:S, 0:S]), jf.T) + self.Q
+        initP = np.eye(2)
+
+        # Update
+        print(str(len(z)) + " landmarks detected")
+        for iz in range(len(z[:, 0])):  # for each observation
+            minid = self.get_correspond_landmark_index(x_est, p_est, z[iz, 0:2])
+
+            nLM = self.calculate_landmark_num(x_est)
+            if minid == nLM:
+                print("New LM")
+                # Extend state and covariance matrix
+                xAug = np.vstack((x_est, self.calculate_landmark_num(x_est, z[iz, :])))
+                PAug = np.vstack((np.hstack((p_est, np.zeros((len(x_est), LM_SIZE)))),
+                                  np.hstack((np.zeros((self.LANDMARK_STATE_SIZE, len(x_est))), initP))))
+                x_est = xAug
+                p_est = PAug
+            lm = self.get_estimated_landmark_position(x_est, minid)
+            e, S, H = calc_innovation(lm, x_est, p_est, z[iz, 0:2], minid)
+
+            K = np.dot(np.dot(p_est, H.T), np.linalg.inv(S))
+            x_est = x_est + np.dot(K, e)
+            p_est = np.dot((np.eye(len(x_est)) - np.dot(K, H)), p_est)
+
+        x_est[2] = pi_2_pi(x_est[2])
+
+        return x_est, p_est
+
+    def get_jacobian_f(self, x_est, u, dt):
+        Fx = np.hstack((np.eye(STATE_SIZE), np.zeros(
+            (STATE_SIZE, LM_SIZE * calc_n_LM(x)))))
+
+        jF = np.array([[0.0, 0.0, -dt * u[0] * math.sin(x[2, 0])],
+                       [0.0, 0.0, dt * u[0] * math.cos(x[2, 0])],
+                       [0.0, 0.0, 0.0]])
+
+        return Fx
+
+    def get_jacobian_h(self, delta, i, n):
+        d = math.sqrt(delta[0, 0]**2 + delta[1, 0]**2)
+        H = np.array([[-d * delta[0, 0], - d * delta[1, 0], 0, d * delta[0, 0], d * delta[1, 0]],
+                      [delta[1, 0], - delta[0, 0], - 1.0, - delta[1, 0], delta[0, 0]]])
+
+        H = H / d**2
+        H1 = np.hstack((np.eye(3), np.zeros((3, 2 * n))))
+        H2 = np.hstack((np.zeros((2, 3)), np.zeros((2, 2 * (i - 1))),
+                        np.eye(2), np.zeros((2, 2 * n - 2 * i))))
+
+        _H = np.vstack((H1, H2))
+
+        H = np.dot(H, _H)
+
+        return H
+
+    def calculate_landmark_num(self, x_est):
+        n = int((len(x) - STATE_SIZE) / LM_SIZE)
+        return n
+
+    def get_estimated_landmark_position(self, x_est, index):
+        lm = x[self.ROBOT_STATE_SIZE + self.LANDMARK_STATE_SIZE * index: self.ROBOT_STATE_SIZE + self.LANDMARK_STATE_SIZE * (index + 1), :]
+        return lm
+
+    def get_correspond_landmark_index(self, x_est, p_est, lm):
+        nLM = self.calculate_landmark_num(x_est)
+        mahalanobis_distance = []
+
+        for i in range(nLM):
+            lm = self.get_estimated_landmark_position(x_est, i)
+            e, S, H = calc_innovation(lm, x_est, p_est, lm, i)
+            mahalanobis_distance.append(np.dot(np.dot(e.T, np.linalg.inv(S)), e))
+
+        mahalanobis_distance.append(M_DIST_TH)  # new landmark
+        minid = mahalanobis_distance.index(min(mahalanobis_distance))
+        return minid
+
+    def calculate_innovation(self, lm, x_est, p_est, z, index):
+        # dx, dy
+        delta = lm - x_est[0:2]
+        # distance^2
+        d2 = np.dot(delta.T, delta)[0, 0]
+        # angle in robot frame
+        zangle = math.atan2(delta[1, 0], delta[0, 0]) - x_est[2, 0]
+        # polar coordinates
+        zp = np.array([[math.sqrt(d2), pi_2_pi(zangle)]])
+        # error in polar coordinates (estimated pose - observed pose)
+        e = (z - zp).T
+        e[1] = pi_2_pi(e[1])
+        H = jacobH(delta, x_est, index + 1, calculate_landmark_num(x_est))
+        S = np.dot(np.dot(H, p_est), H.T) + self.Q[0:2, 0:2]
+        return e, S, H
+
+    def calculate_error_ellipse(self, P):
+        _lambda, _v = np.linalg.eig(P)
+        max_index = np.argmax(_lambda)
+        min_index = np.argmin(_lambda)
+        a = math.sqrt(CHI_2 * _lambda[max_index])
+        b = math.sqrt(CHI_2 * _lambda[min_index])
+        ellipse_angle = math.atan2(_v[max_index, 1], _v[max_index, 0])
+        return a, b, ellipse_angle
+
+    def odom_callback(self, data):
+        current_time = rospy.get_time()
+        dt = current_time - self.last_time
+        self.last_time = current_time
+        pass
 
 def ekf_slam(xEst, PEst, u, z):
 
