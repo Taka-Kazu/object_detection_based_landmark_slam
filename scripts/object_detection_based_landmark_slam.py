@@ -8,6 +8,8 @@ import matplotlib.patches as patches
 
 import ros
 
+np.set_printoptions(linewidth=200)
+
 # EKF state covariance
 Q = np.diag([0.5, 0.5, np.deg2rad(30.0)])**2
 
@@ -56,10 +58,10 @@ def ekf_slam(xEst, PEst, u, z):
             xEst = xAug
             PEst = PAug
         lm = get_LM_Pos_from_state(xEst, minid)
-        y, S, H = calc_innovation(lm, xEst, PEst, z[iz, 0:2], minid)
+        e, S, H = calc_innovation(lm, xEst, PEst, z[iz, 0:2], minid)
 
         K = np.dot(np.dot(PEst, H.T), np.linalg.inv(S))
-        xEst = xEst + np.dot(K, y)
+        xEst = xEst + np.dot(K, e)
         PEst = np.dot((np.eye(len(xEst)) - np.dot(K, H)), PEst)
 
     xEst[2] = pi_2_pi(xEst[2])
@@ -165,8 +167,8 @@ def search_correspond_LM_ID(xAug, PAug, zi):
 
     for i in range(nLM):
         lm = get_LM_Pos_from_state(xAug, i)
-        y, S, H = calc_innovation(lm, xAug, PAug, zi, i)
-        mdist.append(np.dot(np.dot(y.T, np.linalg.inv(S)), y))
+        e, S, H = calc_innovation(lm, xAug, PAug, zi, i)
+        mdist.append(np.dot(np.dot(e.T, np.linalg.inv(S)), e))
 
     mdist.append(M_DIST_TH)  # new landmark
 
@@ -185,12 +187,12 @@ def calc_innovation(lm, xEst, PEst, z, LMid):
     # polar coordinates
     zp = np.array([[math.sqrt(q), pi_2_pi(zangle)]])
     # error in polar coordinates (estimated pose - observed pose)
-    y = (z - zp).T
-    y[1] = pi_2_pi(y[1])
+    e = (z - zp).T
+    e[1] = pi_2_pi(e[1])
     H = jacobH(q, delta, xEst, LMid + 1)
     S = np.dot(np.dot(H, PEst), H.T) + Q[0:2, 0:2]
 
-    return y, S, H
+    return e, S, H
 
 
 def jacobH(q, delta, x, i):
