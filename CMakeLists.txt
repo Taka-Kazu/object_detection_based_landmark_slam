@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(object_detection_based_landmark_slam)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+add_compile_options(-std=c++11)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -200,5 +200,9 @@ include_directories(
 
 add_executable(landmark_simulator src/landmark_simulator.cpp)
 target_link_libraries(landmark_simulator
+  ${catkin_LIBRARIES}
+)
+add_executable(robot_move_simulator src/robot_move_simulator.cpp)
+target_link_libraries(robot_move_simulator
   ${catkin_LIBRARIES}
 )
