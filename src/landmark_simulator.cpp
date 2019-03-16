@@ -1,3 +1,5 @@
+#include <vector>
+
 #include <ros/ros.h>
 #include <tf/tf.h>
 #include <tf/transform_listener.h>
@@ -23,7 +25,7 @@ private:
     ros::Publisher landmark_pub;
     ros::Publisher landmark_label_pub;
     visualization_msgs::MarkerArray landmarks;
-    visualization_msgs::MarkerArray landmarks_labels;
+    visualization_msgs::MarkerArray landmark_labels;
 };
 
 
@@ -49,22 +51,47 @@ void LandmarkSimulator::process(void)
 
     std::cout << "landmark simulator" << std::endl;
 
-    visualization_msgs::Marker landmark;
-    visualization_msgs::Marker landmark_label;
-    landmark.header.frame_id = "world";
-    landmark.header.stamp = ros::Time::now();
-    landmark.ns = "landmark";
-    landmark.type = visualization_msgs::Marker::SPHERE;
-    landmark.action = visualization_msgs::Marker::ADD;
-    set_marker_pose_xyz(landmark, 2, 3, 1);
-    set_marker_pose_rpy(landmark, 0, 0, 0);
-    set_marker_scale_xyz(landmark, 1, 1, 1);
-    set_marker_color_rgba(landmark, 1, 0, 0, 1);
-    landmark.lifetime = ros::Duration();
-    landmarks.markers.push_back(landmark);
+    std::vector<std::vector<double> > landmark_list = {{10.0, -2.0},
+                                                      {15.0, 10.0},
+                                                      {3.0, 15.0},
+                                                      {-5.0, 20.0}};
+    /*
+    for(auto i=landmark_list.begin();i!=landmark_list.end();++i){
+        for(auto j=i->begin();j!=i->end();++j){
+            std::cout << *j << ", ";
+        }
+        std::cout << std::endl;
+    }
+    */
+
+    std::vector<std::string> landmark_label_list = {"chair", "traffic_light", "chair", "desk"};
+
+    for(auto i=landmark_list.begin();i!=landmark_list.end();++i){
+        visualization_msgs::Marker landmark;
+        visualization_msgs::Marker landmark_label;
+        landmark.header.frame_id = "world";
+        landmark.header.stamp = ros::Time::now();
+        landmark.ns = "landmark";
+        landmark.id = i - landmark_list.begin();
+        landmark.type = visualization_msgs::Marker::SPHERE;
+        landmark.action = visualization_msgs::Marker::ADD;
+        set_marker_pose_xyz(landmark, (*i)[0], (*i)[1], 0);
+        set_marker_pose_rpy(landmark, 0, 0, 0);
+        set_marker_scale_xyz(landmark, 1, 1, 1);
+        set_marker_color_rgba(landmark, 1, 0, 0, 1);
+        landmark.lifetime = ros::Duration();
+        landmarks.markers.push_back(landmark);
+
+        landmark_label = landmark;
+        landmark_label.ns = "landmark_label";
+        landmark_label.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+        landmark_label.text = landmark_label_list[landmark_label.id];
+        landmark_labels.markers.push_back(landmark_label);
+    }
 
     while(ros::ok()){
         landmark_pub.publish(landmarks);
+        landmark_label_pub.publish(landmark_labels);
         ros::spinOnce();
         loop_rate.sleep();
 
