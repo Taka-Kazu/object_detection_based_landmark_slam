@@ -197,3 +197,8 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+
+add_executable(landmark_simulator src/landmark_simulator.cpp)
+target_link_libraries(landmark_simulator
+  ${catkin_LIBRARIES}
+)
