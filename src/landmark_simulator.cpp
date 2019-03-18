@@ -12,7 +12,6 @@ class LandmarkSimulator
 {
 public:
     LandmarkSimulator(void);
-    void waypoint_callback(const geometry_msgs::PoseArrayConstPtr&);
     void process(void);
 
 private:
