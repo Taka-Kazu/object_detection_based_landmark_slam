@@ -206,3 +206,7 @@ add_executable(robot_move_simulator src/robot_move_simulator.cpp)
 target_link_libraries(robot_move_simulator
   ${catkin_LIBRARIES}
 )
+add_executable(observation_simulator src/observation_simulator.cpp)
+target_link_libraries(observation_simulator
+  ${catkin_LIBRARIES}
+)
