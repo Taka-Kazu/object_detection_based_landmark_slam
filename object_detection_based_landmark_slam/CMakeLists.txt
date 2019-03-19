@@ -211,3 +211,4 @@ add_executable(observation_simulator src/observation_simulator.cpp)
 target_link_libraries(observation_simulator
   ${catkin_LIBRARIES}
 )
+add_dependencies(observation_simulator landmark_slam_msgs_generate_messages_cpp)

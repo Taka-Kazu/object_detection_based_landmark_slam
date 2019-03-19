@@ -8,6 +8,8 @@
 #include <std_msgs/Empty.h>
 #include <visualization_msgs/MarkerArray.h>
 
+#include "landmark_slam_msgs/Landmark.h"
+
 class ObservationSimulator
 {
 public:
