@@ -1,4 +1,5 @@
 #include <vector>
+#include <random>
 
 #include <ros/ros.h>
 #include <tf/tf.h>
@@ -8,7 +9,10 @@
 #include <std_msgs/Empty.h>
 #include <visualization_msgs/MarkerArray.h>
 
-#include "landmark_slam_msgs/Landmark.h"
+#include "landmark_slam_msgs/LandmarkArray.h"
+
+std::mt19937 mt{std::random_device{}()};
+std::uniform_real_distribution<> dist(-1.0, 1.0);
 
 class ObservationSimulator
 {
@@ -23,19 +27,19 @@ private:
     void set_marker_pose_rpy(visualization_msgs::Marker&, double, double, double);
     void set_marker_scale_xyz(visualization_msgs::Marker&, double, double, double);
     void set_marker_color_rgba(visualization_msgs::Marker&, double, double, double, double);
+    void add_noise(geometry_msgs::Pose&);
 
     ros::NodeHandle nh;
     ros::Publisher landmark_pub;
-    ros::Publisher landmark_label_pub;
     ros::Subscriber landmark_sub;
     ros::Subscriber landmark_label_sub;
     visualization_msgs::MarkerArray landmarks;
     visualization_msgs::MarkerArray landmark_labels;
-    visualization_msgs::MarkerArray lms;
-    visualization_msgs::MarkerArray lm_labels;
+    landmark_slam_msgs::LandmarkArray lm;
     bool landmark_updated;
     bool landmark_label_updated;
     tf::TransformListener listener;
+    std::vector<double> R = {1.0*1.0, (M_PI/18.0)*(M_PI/18.0)};// input noise
 };
 
 
@@ -51,8 +55,7 @@ int main(int argc, char** argv)
 
 ObservationSimulator::ObservationSimulator(void)
 {
-    landmark_pub = nh.advertise<visualization_msgs::MarkerArray>("/observation/sim", 1);
-    landmark_label_pub = nh.advertise<visualization_msgs::MarkerArray>("/observation/label/sim", 1);
+    landmark_pub = nh.advertise<landmark_slam_msgs::LandmarkArray>("/observation/sim", 1);
     landmark_sub = nh.subscribe("/landmark/sim", 1, &ObservationSimulator::landmark_callback, this);
     landmark_label_sub = nh.subscribe("/landmark/label/sim", 1, &ObservationSimulator::landmark_label_callback, this);
     landmark_updated = false;
@@ -66,8 +69,7 @@ void ObservationSimulator::process(void)
     std::cout << "observation simulator" << std::endl;
 
     while(ros::ok()){
-        lms.markers.clear();
-        lm_labels.markers.clear();
+        lm.landmarks.clear();
         if(landmark_updated && landmark_label_updated){
             try{
                 tf::StampedTransform transform;
@@ -82,11 +84,13 @@ void ObservationSimulator::process(void)
                     pt_in.pose = it->pose;
                     pt_out.header = pt_in.header = it->header;
                     pt_out.header.frame_id = "base_link";
-                    visualization_msgs::Marker marker;
-                    marker = *it;
-                    marker.pose = pt_out.pose;
-                    marker.header = pt_out.header;
-                    lms.markers.push_back(marker);
+                    listener.transformPose(pt_out.header.frame_id, pt_in, pt_out);
+                    landmark_slam_msgs::Landmark landmark;
+                    landmark.pose = pt_out;
+                    add_noise(landmark.pose.pose);
+                    landmark.header = pt_out.header;
+                    landmark.label = landmark_labels.markers[it - landmarks.markers.begin()].text;
+                    lm.landmarks.push_back(landmark);
                 }
             }catch(tf::TransformException ex){
                 ROS_ERROR("%s\n", ex.what());
@@ -94,8 +98,8 @@ void ObservationSimulator::process(void)
             landmark_updated = false;
             landmark_label_updated = false;
         }
-        landmark_pub.publish(lms);
-        landmark_label_pub.publish(lm_labels);
+        lm.header.stamp = ros::Time::now();
+        landmark_pub.publish(lm);
         ros::spinOnce();
         loop_rate.sleep();
     }
@@ -138,4 +142,14 @@ void ObservationSimulator::landmark_label_callback(const visualization_msgs::Mar
 {
     landmark_labels = *msg;
     landmark_label_updated = true;
+}
+
+void ObservationSimulator::add_noise(geometry_msgs::Pose& pose)
+{
+    double distance = pose.position.x * pose.position.x + pose.position.y * pose.position.y;
+    distance = sqrt(distance) + dist(mt) * R[0];
+    double angle = atan2(pose.position.y, pose.position.x) + dist(mt) * R[1];
+    pose.position.x = distance * cos(angle);
+    pose.position.y = distance * sin(angle);
+    pose.orientation = tf::createQuaternionMsgFromYaw(angle);
 }
