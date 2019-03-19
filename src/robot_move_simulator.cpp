@@ -45,6 +45,7 @@ RobotMoveSimulator::RobotMoveSimulator(void)
     odom_truth_pub = nh.advertise<nav_msgs::Odometry>("/odom/sim/truth", 1);
     odom_with_noise_pub = nh.advertise<nav_msgs::Odometry>("/odom/sim/noise", 1);
     odom_truth.header.frame_id = "world";
+    odom_truth.child_frame_id = "base_link";
     odom_truth.pose.pose.orientation = tf::createQuaternionMsgFromYaw(0);
     odom_with_noise = odom_truth;
 }
