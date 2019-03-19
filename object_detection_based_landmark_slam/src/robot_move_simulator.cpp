@@ -48,6 +48,7 @@ RobotMoveSimulator::RobotMoveSimulator(void)
     odom_truth.child_frame_id = "base_link";
     odom_truth.pose.pose.orientation = tf::createQuaternionMsgFromYaw(0);
     odom_with_noise = odom_truth;
+    odom_with_noise.header.frame_id = "odom";
 }
 
 void RobotMoveSimulator::process(void)
