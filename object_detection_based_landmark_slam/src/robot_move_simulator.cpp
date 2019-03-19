@@ -62,6 +62,7 @@ void RobotMoveSimulator::process(void)
         odom_truth.pose.pose.position.x += VX * cos(yaw) * DT;
         odom_truth.pose.pose.position.y += VX * sin(yaw) * DT;
         odom_truth.pose.pose.orientation = tf::createQuaternionMsgFromYaw(yaw + YAWRATE * DT);
+        odom_truth.header.stamp = ros::Time::now();
         odom_truth_pub.publish(odom_truth);
         double _vx = VX + dist(mt) * R[0];
         double _yawrate = YAWRATE + dist(mt) * R[1];
@@ -69,6 +70,7 @@ void RobotMoveSimulator::process(void)
         odom_with_noise.pose.pose.position.x += _vx * cos(_yaw) * DT;
         odom_with_noise.pose.pose.position.y += _vx * sin(_yaw) * DT;
         odom_with_noise.pose.pose.orientation = tf::createQuaternionMsgFromYaw(_yaw + _yawrate * DT);
+        odom_with_noise.header.stamp = ros::Time::now();
         odom_with_noise_pub.publish(odom_with_noise);
         ros::spinOnce();
         loop_rate.sleep();
