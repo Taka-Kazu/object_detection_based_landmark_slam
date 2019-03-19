@@ -89,6 +89,10 @@ void LandmarkSimulator::process(void)
     }
 
     while(ros::ok()){
+        for(auto i=landmarks.markers.begin();i!=landmarks.markers.end();++i){
+            int index = i - landmarks.markers.begin();
+            landmarks.markers[index].header.stamp = landmark_labels.markers[index].header.stamp= ros::Time::now();
+        }
         landmark_pub.publish(landmarks);
         landmark_label_pub.publish(landmark_labels);
         ros::spinOnce();
