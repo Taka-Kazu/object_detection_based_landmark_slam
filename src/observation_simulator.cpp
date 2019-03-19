@@ -7,16 +7,14 @@
 #include <geometry_msgs/PoseArray.h>
 #include <std_msgs/Empty.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <message_filters/subscriber.h>
-#include <message_filters/time_synchronizer.h>
-#include <message_filters/sync_policies/approximate_time.h>
 
 class ObservationSimulator
 {
 public:
     ObservationSimulator(void);
     void process(void);
-    void callback(const visualization_msgs::MarkerArrayConstPtr&, const visualization_msgs::MarkerArrayConstPtr&);
+    void landmark_callback(const visualization_msgs::MarkerArrayConstPtr&);
+    void landmark_label_callback(const visualization_msgs::MarkerArrayConstPtr&);
 
 private:
     void set_marker_pose_xyz(visualization_msgs::Marker&, double, double, double);
@@ -27,12 +25,15 @@ private:
     ros::NodeHandle nh;
     ros::Publisher landmark_pub;
     ros::Publisher landmark_label_pub;
-    message_filters::Subscriber<visualization_msgs::MarkerArray> landmark_sub;
-    message_filters::Subscriber<visualization_msgs::MarkerArray> landmark_label_sub;
-    typedef message_filters::sync_policies::ApproximateTime<visualization_msgs::MarkerArray, visualization_msgs::MarkerArray> sync_subs;
-    message_filters::Synchronizer<sync_subs> sync;
+    ros::Subscriber landmark_sub;
+    ros::Subscriber landmark_label_sub;
     visualization_msgs::MarkerArray landmarks;
     visualization_msgs::MarkerArray landmark_labels;
+    visualization_msgs::MarkerArray lms;
+    visualization_msgs::MarkerArray lm_labels;
+    bool landmark_updated;
+    bool landmark_label_updated;
+    tf::TransformListener listener;
 };
 
 
@@ -47,12 +48,13 @@ int main(int argc, char** argv)
 }
 
 ObservationSimulator::ObservationSimulator(void)
-    :landmark_sub(nh, "/landmark/sim", 1), landmark_label_sub(nh, "/landmark/label/sim", 1),
-     sync(sync_subs(30), landmark_sub, landmark_label_sub)
 {
-    sync.registerCallback(boost::bind(&ObservationSimulator::callback, this, _1, _2));
     landmark_pub = nh.advertise<visualization_msgs::MarkerArray>("/observation/sim", 1);
     landmark_label_pub = nh.advertise<visualization_msgs::MarkerArray>("/observation/label/sim", 1);
+    landmark_sub = nh.subscribe("/landmark/sim", 1, &ObservationSimulator::landmark_callback, this);
+    landmark_label_sub = nh.subscribe("/landmark/label/sim", 1, &ObservationSimulator::landmark_label_callback, this);
+    landmark_updated = false;
+    landmark_label_updated = false;
 }
 
 void ObservationSimulator::process(void)
@@ -61,17 +63,39 @@ void ObservationSimulator::process(void)
 
     std::cout << "observation simulator" << std::endl;
 
-    std::vector<std::vector<double> > landmark_list = {{10.0, -2.0},
-                                                      {15.0, 10.0},
-                                                      {3.0, 15.0},
-                                                      {-5.0, 20.0}};
-
     while(ros::ok()){
-        landmark_pub.publish(landmarks);
-        landmark_label_pub.publish(landmark_labels);
+        lms.markers.clear();
+        lm_labels.markers.clear();
+        if(landmark_updated && landmark_label_updated){
+            try{
+                tf::StampedTransform transform;
+                listener.lookupTransform("world", "base_link", ros::Time(0), transform);
+                geometry_msgs::PoseStamped pose;
+                tf::poseTFToMsg(transform, pose.pose);
+                pose.header.frame_id = transform.frame_id_;
+                pose.header.stamp = transform.stamp_;
+                for(auto it=landmarks.markers.begin();it!=landmarks.markers.end();++it){
+                    geometry_msgs::PoseStamped pt_in;
+                    geometry_msgs::PoseStamped pt_out;
+                    pt_in.pose = it->pose;
+                    pt_out.header = pt_in.header = it->header;
+                    pt_out.header.frame_id = "base_link";
+                    visualization_msgs::Marker marker;
+                    marker = *it;
+                    marker.pose = pt_out.pose;
+                    marker.header = pt_out.header;
+                    lms.markers.push_back(marker);
+                }
+            }catch(tf::TransformException ex){
+                ROS_ERROR("%s\n", ex.what());
+            }
+            landmark_updated = false;
+            landmark_label_updated = false;
+        }
+        landmark_pub.publish(lms);
+        landmark_label_pub.publish(lm_labels);
         ros::spinOnce();
         loop_rate.sleep();
-
     }
 }
 
@@ -102,7 +126,14 @@ void ObservationSimulator::set_marker_color_rgba(visualization_msgs::Marker& mar
     marker.color.a = a;
 }
 
-void ObservationSimulator::callback(const visualization_msgs::MarkerArrayConstPtr& landmark, const visualization_msgs::MarkerArrayConstPtr& label)
+void ObservationSimulator::landmark_callback(const visualization_msgs::MarkerArrayConstPtr& msg)
 {
+    landmarks = *msg;
+    landmark_updated = true;
+}
 
+void ObservationSimulator::landmark_label_callback(const visualization_msgs::MarkerArrayConstPtr& msg)
+{
+    landmark_labels = *msg;
+    landmark_label_updated = true;
 }
