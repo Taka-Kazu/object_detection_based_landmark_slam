@@ -39,7 +39,7 @@ private:
     bool landmark_updated;
     bool landmark_label_updated;
     tf::TransformListener listener;
-    std::vector<double> R = {1.0*1.0, (M_PI/18.0)*(M_PI/18.0)};// input noise
+    std::vector<double> R = {0.2*0.2, (M_PI/18.0)*(M_PI/18.0)};// input noise
 };
 
 
