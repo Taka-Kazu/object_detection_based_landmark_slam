@@ -9,6 +9,7 @@ import tf
 from nav_msgs.msg import Odometry
 import message_filters
 from geometry_msgs.msg import Quaternion
+from visualization_msgs.msg import Marker, MarkerArray
 
 from landmark_slam_msgs.msg import Landmark, LandmarkArray
 
@@ -33,6 +34,7 @@ class ObjectDetectionBasedLandmarkSLAM:
         mf = message_filters.ApproximateTimeSynchronizer([self.odom_sub, self.lm_sub], 1, 0.1)
         mf.registerCallback(self.callback)
         self.estimated_pose_pub = rospy.Publisher('/estimated_pose', Odometry, queue_size=1)
+        self.marker_pub = rospy.Publisher('/error_ellipse', MarkerArray, queue_size=1)
 
         self.last_time = rospy.get_time()
         self.current_pose = None
@@ -41,6 +43,7 @@ class ObjectDetectionBasedLandmarkSLAM:
         self.x_est = np.zeros((self.ROBOT_STATE_SIZE, 1))
         self.p_est = np.eye(self.ROBOT_STATE_SIZE)
         self.estimated_pose = Odometry()
+        self.error_ellipse = MarkerArray()
         print 'object detection based landmark SLAM'
 
         self.send_transform(self.x_est)
@@ -203,6 +206,7 @@ class ObjectDetectionBasedLandmarkSLAM:
             z = self.get_observation_from_landmark_msg(lm)
             self.x_est, self.p_est = self.ekf_slam(self.x_est, self.p_est, u, z, dt)
             self.publish_estimated_pose(self.x_est, self.p_est)
+            self.publish_error_ellipse_markers(self.x_est, self.p_est)
 
     def get_observation_from_landmark_msg(self, landmark):
         z = []
@@ -215,7 +219,7 @@ class ObjectDetectionBasedLandmarkSLAM:
     def send_transform(self, x):
         br = tf.TransformBroadcaster()
         br.sendTransform((x[0], x[1], 0),
-                         self.get_quaternion_from_yaw(x[2]),
+                         self.get_quaternion_from_yaw(x[2, 0]),
                          rospy.Time.now(),
                          "base_link",
                          "world"
@@ -227,7 +231,7 @@ class ObjectDetectionBasedLandmarkSLAM:
             r.sleep()
 
     def get_quaternion_from_yaw(self, yaw):
-        q = tf.transformations.quaternion_from_euler(0, 0, yaw[0])
+        q = tf.transformations.quaternion_from_euler(0, 0, yaw)
         return q
 
     def publish_estimated_pose(self, x, p):
@@ -236,7 +240,7 @@ class ObjectDetectionBasedLandmarkSLAM:
         self.estimated_pose.child_frame_id = "base_link"
         self.estimated_pose.pose.pose.position.x = x[0]
         self.estimated_pose.pose.pose.position.y = x[1]
-        q = self.get_quaternion_from_yaw(x[2])
+        q = self.get_quaternion_from_yaw(x[2, 0])
         self.estimated_pose.pose.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
         '''
         self.estimated_pose.pose.covariance[0] = p[0, 0]
@@ -250,6 +254,43 @@ class ObjectDetectionBasedLandmarkSLAM:
         self.estimated_pose.pose.covariance[35] = p[2, 2]
         '''
         self.estimated_pose_pub.publish(self.estimated_pose);
+
+    def publish_error_ellipse_markers(self, x, p):
+        self.error_ellipse = MarkerArray()
+        m = self.get_error_ellipse_marker(x[0:self.ROBOT_STATE_SIZE-1], p[0:self.ROBOT_STATE_SIZE-1, 0:self.ROBOT_STATE_SIZE-1], 0)
+
+        self.error_ellipse.markers.append(m)
+
+        n = self.calculate_landmark_num(x)
+        for i in range(n):
+            _x = x[self.ROBOT_STATE_SIZE + i * self.LANDMARK_STATE_SIZE:self.ROBOT_STATE_SIZE + (i+1) * self.LANDMARK_STATE_SIZE]
+            _p = p[self.ROBOT_STATE_SIZE + i * self.LANDMARK_STATE_SIZE:self.ROBOT_STATE_SIZE + (i+1) * self.LANDMARK_STATE_SIZE, self.ROBOT_STATE_SIZE + i * self.LANDMARK_STATE_SIZE:self.ROBOT_STATE_SIZE + (i+1) * self.LANDMARK_STATE_SIZE]
+
+            m = self.get_error_ellipse_marker(_x, _p, i+1)
+            self.error_ellipse.markers.append(m)
+
+        self.marker_pub.publish(self.error_ellipse)
+
+    def get_error_ellipse_marker(self, x, p, i):
+        m = Marker()
+        m.header.frame_id = "world"
+        m.header.stamp = rospy.get_rostime()
+        m.ns = "error_ellipse"
+        m.action = Marker().ADD
+        m.type = Marker().SPHERE
+        m.lifetime = rospy.Duration()
+        m.scale.z = 0.001
+        m.color.a = 1
+        m.color.g = 1
+        m.id = i
+        m.pose.position.x = x[0]
+        m.pose.position.y = x[1]
+        a, b, angle = self.calculate_error_ellipse(p[0:self.ROBOT_STATE_SIZE-1, 0:self.ROBOT_STATE_SIZE-1])
+        q = self.get_quaternion_from_yaw(angle)
+        m.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
+        m.scale.x = a
+        m.scale.y = b
+        return m
 
 if __name__ == '__main__':
     odlm_slam = ObjectDetectionBasedLandmarkSLAM()
