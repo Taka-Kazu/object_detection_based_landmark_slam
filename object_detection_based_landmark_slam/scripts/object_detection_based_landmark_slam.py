@@ -62,7 +62,9 @@ class ObjectDetectionBasedLandmarkSLAM:
         self.estimated_pose = Odometry()
         print 'object detection based landmark SLAM'
 
-        rospy.spin()
+        self.send_transform(self.x_est)
+
+        #rospy.spin()
 
     def move(self, x, u, dt):
         F = np.array([[1.0, 0, 0],
@@ -77,17 +79,20 @@ class ObjectDetectionBasedLandmarkSLAM:
         return x
 
     def ekf_slam(self, x_est, p_est, u, z, dt):
+        print "start ekf_slam"
         # Predict
-        S = self.ROBOT_STATE_SIZE
+        S_ = self.ROBOT_STATE_SIZE
         #print x_est, p_est, u, z, dt
-        print x_est
-        print p_est
+        print x_est[0:S_]
+        print p_est[0:S_, 0:S_]
+        '''
         print u
         print z
         print dt
-        x_est[0:S] = self.move(x_est[0:S], u, dt)
-        jf = self.get_jacobian_f(x_est[0:S], u, dt)
-        p_est[0:S, 0:S] = np.dot(np.dot(jf, p_est[0:S, 0:S]), jf.T) + self.Q
+        '''
+        x_est[0:S_] = self.move(x_est[0:S_], u, dt)
+        jf = self.get_jacobian_f(x_est[0:S_], u, dt)
+        p_est[0:S_, 0:S_] = np.dot(np.dot(jf, p_est[0:S_, 0:S_]), jf.T) + self.Q
         initP = np.eye(2)
 
         # Update
@@ -112,7 +117,6 @@ class ObjectDetectionBasedLandmarkSLAM:
             p_est = np.dot((np.eye(len(x_est)) - np.dot(K, H)), p_est)
 
         x_est[2] = self.pi_2_pi(x_est[2])
-        print x_est
 
         return x_est, p_est
 
@@ -124,7 +128,8 @@ class ObjectDetectionBasedLandmarkSLAM:
                        [0.0, 0.0, dt * u[0] * math.cos(x[2, 0])],
                        [0.0, 0.0, 0.0]])
 
-        return Fx
+        #return Fx
+        return jF
 
     def get_jacobian_h(self, delta, i, n):
         d = math.sqrt(delta[0, 0]**2 + delta[1, 0]**2)
@@ -200,7 +205,6 @@ class ObjectDetectionBasedLandmarkSLAM:
         return (angle + math.pi) % (2 * math.pi) - math.pi
 
     def callback(self, odom, lm):
-        print "callback"
         current_time = rospy.get_time()
         dt = current_time - self.last_time
         self.last_time = current_time
@@ -222,7 +226,7 @@ class ObjectDetectionBasedLandmarkSLAM:
             self.estimated_pose.child_frame_id = "base_link"
             self.estimated_pose.pose.pose.position.x = self.x_est[0]
             self.estimated_pose.pose.pose.position.y = self.x_est[1]
-            q = tf.transformations.quaternion_from_euler(0, 0, self.x_est[2])
+            q = self.get_quaternion_from_yaw(self.x_est[2])
             self.estimated_pose.pose.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
             self.estimated_pose_pub.publish(self.estimated_pose);
 
@@ -233,6 +237,25 @@ class ObjectDetectionBasedLandmarkSLAM:
             z.append(_z)
         z = np.array(z)
         return z
+
+    def send_transform(self, x):
+        br = tf.TransformBroadcaster()
+        br.sendTransform((x[0], x[1], 0),
+                         self.get_quaternion_from_yaw(x[2]),
+                         rospy.Time.now(),
+                         "base_link",
+                         "world"
+                         )
+    def process(self):
+        r = rospy.Rate(10)
+        while not rospy.is_shutdown():
+            self.send_transform(self.x_est)
+            r.sleep()
+
+    def get_quaternion_from_yaw(self, yaw):
+        q = tf.transformations.quaternion_from_euler(0, 0, yaw[0])
+        return q
+
 
 '''
 def ekf_slam(xEst, PEst, u, z):
@@ -513,3 +536,4 @@ def main():
 if __name__ == '__main__':
     #main()
     odlm_slam = ObjectDetectionBasedLandmarkSLAM()
+    odlm_slam.process()
