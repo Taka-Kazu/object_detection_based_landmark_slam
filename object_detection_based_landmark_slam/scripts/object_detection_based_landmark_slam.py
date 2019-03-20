@@ -92,7 +92,7 @@ class ObjectDetectionBasedLandmarkSLAM:
 
         # Update
         print(str(len(z)) + " landmarks detected")
-        for iz in range(len(z[:, 0])):  # for each observation
+        for iz in range(len(z)):  # for each observation
             minid = self.get_correspond_landmark_index(x_est, p_est, z[iz, 0:2])
 
             nLM = self.calculate_landmark_num(x_est)
