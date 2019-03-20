@@ -73,7 +73,7 @@ void ObservationSimulator::process(void)
         if(landmark_updated && landmark_label_updated){
             try{
                 tf::StampedTransform transform;
-                listener.lookupTransform("world", "base_link", ros::Time(0), transform);
+                listener.lookupTransform("world", "base_link_noise", ros::Time(0), transform);
                 geometry_msgs::PoseStamped pose;
                 tf::poseTFToMsg(transform, pose.pose);
                 pose.header.frame_id = transform.frame_id_;
@@ -83,7 +83,7 @@ void ObservationSimulator::process(void)
                     geometry_msgs::PoseStamped pt_out;
                     pt_in.pose = it->pose;
                     pt_out.header = pt_in.header = it->header;
-                    pt_out.header.frame_id = "base_link";
+                    pt_out.header.frame_id = "base_link_noise";
                     listener.transformPose(pt_out.header.frame_id, pt_in, pt_out);
                     landmark_slam_msgs::Landmark landmark;
                     landmark.pose = pt_out;

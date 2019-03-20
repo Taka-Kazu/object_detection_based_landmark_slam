@@ -9,6 +9,4 @@
     <node pkg="object_detection_based_landmark_slam" type="observation_simulator" name="observation_simulator">
     </node>
 
-    <node pkg="tf" type="static_transform_publisher" name="fake_world_to_base_link" args="0 0 0 0 0 0 world base_link 100"/>
-
 </launch>

@@ -4,6 +4,7 @@
 #include <ros/ros.h>
 #include <tf/tf.h>
 #include <tf/transform_listener.h>
+#include <tf/transform_broadcaster.h>
 #include <nav_msgs/Odometry.h>
 
 std::mt19937 mt{std::random_device{}()};
@@ -45,10 +46,11 @@ RobotMoveSimulator::RobotMoveSimulator(void)
     odom_truth_pub = nh.advertise<nav_msgs::Odometry>("/odom/sim/truth", 1);
     odom_with_noise_pub = nh.advertise<nav_msgs::Odometry>("/odom/sim/noise", 1);
     odom_truth.header.frame_id = "world";
-    odom_truth.child_frame_id = "base_link";
+    odom_truth.child_frame_id = "base_link_truth";
     odom_truth.pose.pose.orientation = tf::createQuaternionMsgFromYaw(0);
     odom_with_noise = odom_truth;
-    odom_with_noise.header.frame_id = "odom";
+    odom_with_noise.header.frame_id = "world";
+    odom_with_noise.child_frame_id = "base_link_noise";
 }
 
 void RobotMoveSimulator::process(void)
@@ -56,6 +58,8 @@ void RobotMoveSimulator::process(void)
     ros::Rate loop_rate(1.0 / DT);
 
     std::cout << "robot move simulator" << std::endl;
+
+    tf::TransformBroadcaster br;
 
     while(ros::ok()){
         double yaw = tf::getYaw(odom_truth.pose.pose.orientation);
@@ -72,6 +76,11 @@ void RobotMoveSimulator::process(void)
         odom_with_noise.pose.pose.orientation = tf::createQuaternionMsgFromYaw(_yaw + _yawrate * DT);
         odom_with_noise.header.stamp = ros::Time::now();
         odom_with_noise_pub.publish(odom_with_noise);
+
+        tf::Transform tf_pose;
+        tf::poseMsgToTF(odom_with_noise.pose.pose, tf_pose);
+
+        br.sendTransform(tf::StampedTransform(tf_pose, ros::Time::now(), odom_with_noise.header.frame_id, odom_with_noise.child_frame_id));
         ros::spinOnce();
         loop_rate.sleep();
 
