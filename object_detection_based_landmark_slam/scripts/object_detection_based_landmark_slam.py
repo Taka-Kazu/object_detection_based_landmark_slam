@@ -21,14 +21,12 @@ class ObjectDetectionBasedLandmarkSLAM:
     def __init__(self):
         self.Q = np.diag([0.5, 0.5, np.radians(30.0)])**2
         self.R = np.diag([1.0, np.radians(10.0)])**2 # input noise
-        self.MAX_RANGE = 10.0
         self.LIMIT_MAHALANOBIS_DISTANCE = 2.0
         self.ROBOT_STATE_SIZE = 3 # x, y, yaw
         self.LANDMARK_STATE_SIZE = 2 # x, y
 
         rospy.init_node('object_detection_based_landmark_slam')
 
-        #self.odom_sub = rospy.Subscriber('/odometry', Odometry, self.odom_callback, queue_size=1)
         self.odom_sub = message_filters.Subscriber('/odom/sim/noise', Odometry)
         self.lm_sub = message_filters.Subscriber('/observation/sim', LandmarkArray)
         mf = message_filters.ApproximateTimeSynchronizer([self.odom_sub, self.lm_sub], 1, 0.1)
@@ -48,8 +46,6 @@ class ObjectDetectionBasedLandmarkSLAM:
 
         self.send_transform(self.x_est)
 
-        #rospy.spin()
-
     def move(self, x, u, dt):
         F = np.array([[1.0, 0, 0],
                       [0, 1.0, 0],
@@ -66,7 +62,6 @@ class ObjectDetectionBasedLandmarkSLAM:
         print "start ekf_slam"
         # Predict
         S_ = self.ROBOT_STATE_SIZE
-        #print x_est, p_est, u, z, dt
         print x_est[0:S_]
         print p_est[0:S_, 0:S_]
         '''
@@ -77,7 +72,6 @@ class ObjectDetectionBasedLandmarkSLAM:
         x_est[0:S_] = self.move(x_est[0:S_], u, dt)
         jf = self.get_jacobian_f(x_est[0:S_], u, dt)
         p_est[0:S_, 0:S_] = np.dot(np.dot(jf, p_est[0:S_, 0:S_]), jf.T) + self.Q
-        initP = np.eye(2)
 
         # Update
         print(str(len(z)) + " landmarks detected")
@@ -90,7 +84,7 @@ class ObjectDetectionBasedLandmarkSLAM:
                 # Extend state and covariance matrix
                 xAug = np.vstack((x_est, self.calculate_landmark_position(x_est, z[iz, :])))
                 PAug = np.vstack((np.hstack((p_est, np.zeros((len(x_est), self.LANDMARK_STATE_SIZE)))),
-                                  np.hstack((np.zeros((self.LANDMARK_STATE_SIZE, len(x_est))), initP))))
+                                  np.hstack((np.zeros((self.LANDMARK_STATE_SIZE, len(x_est))), np.eye(self.LANDMARK_STATE_SIZE)))))
                 x_est = xAug
                 p_est = PAug
             lm = self.get_estimated_landmark_position(x_est, minid)
