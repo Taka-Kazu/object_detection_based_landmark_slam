@@ -14,6 +14,9 @@
 std::mt19937 mt{std::random_device{}()};
 std::uniform_real_distribution<> dist(-1.0, 1.0);
 
+double OBSERVATION_PROBABILITY;
+double RANGE_LIMIT;
+
 class ObservationSimulator
 {
 public:
@@ -49,6 +52,9 @@ int main(int argc, char** argv)
     ros::NodeHandle nh;
     ros::NodeHandle local_nh("~");
 
+    local_nh.param("OBSERVATION_PROBABILITY", OBSERVATION_PROBABILITY, 0.5);
+    local_nh.param("RANGE_LIMIT", RANGE_LIMIT, 15.0);
+
     ObservationSimulator observation_simulator;
     observation_simulator.process();
 }
@@ -79,18 +85,23 @@ void ObservationSimulator::process(void)
                 pose.header.frame_id = transform.frame_id_;
                 pose.header.stamp = transform.stamp_;
                 for(auto it=landmarks.markers.begin();it!=landmarks.markers.end();++it){
-                    geometry_msgs::PoseStamped pt_in;
-                    geometry_msgs::PoseStamped pt_out;
-                    pt_in.pose = it->pose;
-                    pt_out.header = pt_in.header = it->header;
-                    pt_out.header.frame_id = "base_link_truth";
-                    listener.transformPose(pt_out.header.frame_id, pt_in, pt_out);
-                    landmark_slam_msgs::Landmark landmark;
-                    landmark.pose = pt_out;
-                    add_noise(landmark.pose.pose);
-                    landmark.header = pt_out.header;
-                    landmark.label = landmark_labels.markers[it - landmarks.markers.begin()].text;
-                    lm.landmarks.push_back(landmark);
+                    if(fabs(dist(mt) <= OBSERVATION_PROBABILITY)){
+                        geometry_msgs::PoseStamped pt_in;
+                        geometry_msgs::PoseStamped pt_out;
+                        pt_in.pose = it->pose;
+                        pt_out.header = pt_in.header = it->header;
+                        pt_out.header.frame_id = "base_link_truth";
+                        listener.transformPose(pt_out.header.frame_id, pt_in, pt_out);
+                        double distance = sqrt(pt_out.pose.position.x * pt_out.pose.position.x + pt_out.pose.position.y * pt_out.pose.position.y);
+                        if(distance < RANGE_LIMIT){
+                            landmark_slam_msgs::Landmark landmark;
+                            landmark.pose = pt_out;
+                            add_noise(landmark.pose.pose);
+                            landmark.header = pt_out.header;
+                            landmark.label = landmark_labels.markers[it - landmarks.markers.begin()].text;
+                            lm.landmarks.push_back(landmark);
+                        }
+                    }
                 }
             }catch(tf::TransformException ex){
                 ROS_ERROR("%s\n", ex.what());

@@ -7,6 +7,8 @@
     </node>
 
     <node pkg="object_detection_based_landmark_slam" type="observation_simulator" name="observation_simulator">
+        <param name="OBSERVATION_PROBABILITY" value="0.8"/>
+        <param name="RANGE_LIMIT" value="15.0"/>
     </node>
 
 </launch>
