@@ -86,7 +86,7 @@ class ObjectDetectionBasedLandmarkSLAM:
                 print("New LM")
                 # Extend state and covariance matrix
                 xAug = np.vstack((x_est, self.calculate_landmark_position(x_est, z[iz, :])))
-                PAug = np.vstack((np.hstack((p_est, np.zeros((len(x_est), LM_SIZE)))),
+                PAug = np.vstack((np.hstack((p_est, np.zeros((len(x_est), self.LANDMARK_STATE_SIZE)))),
                                   np.hstack((np.zeros((self.LANDMARK_STATE_SIZE, len(x_est))), initP))))
                 x_est = xAug
                 p_est = PAug
@@ -102,8 +102,8 @@ class ObjectDetectionBasedLandmarkSLAM:
         return x_est, p_est
 
     def get_jacobian_f(self, x, u, dt):
-        Fx = np.hstack((np.eye(STATE_SIZE), np.zeros(
-            (STATE_SIZE, LM_SIZE * self.calculate_landmark_num(x)))))
+        Fx = np.hstack((np.eye(self.ROBOT_STATE_SIZE), np.zeros(
+            (self.ROBOT_STATE_SIZE, self.LANDMARK_STATE_SIZE * self.calculate_landmark_num(x)))))
 
         jF = np.array([[0.0, 0.0, -dt * u[0] * math.sin(x[2, 0])],
                        [0.0, 0.0, dt * u[0] * math.cos(x[2, 0])],
@@ -129,7 +129,7 @@ class ObjectDetectionBasedLandmarkSLAM:
         return H
 
     def calculate_landmark_num(self, x):
-        n = int((len(x) - STATE_SIZE) / LM_SIZE)
+        n = int((len(x) - self.ROBOT_STATE_SIZE) / self.LANDMARK_STATE_SIZE)
         return n
 
     def get_estimated_landmark_position(self, x, index):
