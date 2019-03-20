@@ -78,9 +78,9 @@ void RobotMoveSimulator::process(void)
         odom_with_noise_pub.publish(odom_with_noise);
 
         tf::Transform tf_pose;
-        tf::poseMsgToTF(odom_with_noise.pose.pose, tf_pose);
+        tf::poseMsgToTF(odom_truth.pose.pose, tf_pose);
 
-        br.sendTransform(tf::StampedTransform(tf_pose, ros::Time::now(), odom_with_noise.header.frame_id, odom_with_noise.child_frame_id));
+        br.sendTransform(tf::StampedTransform(tf_pose, ros::Time::now(), odom_truth.header.frame_id, odom_truth.child_frame_id));
         ros::spinOnce();
         loop_rate.sleep();
 
