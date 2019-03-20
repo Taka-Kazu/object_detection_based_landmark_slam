@@ -202,14 +202,7 @@ class ObjectDetectionBasedLandmarkSLAM:
             u = np.array([[v, omega]]).T
             z = self.get_observation_from_landmark_msg(lm)
             self.x_est, self.p_est = self.ekf_slam(self.x_est, self.p_est, u, z, dt)
-            self.estimated_pose.header.frame_id = "world"
-            self.estimated_pose.header.stamp = rospy.get_rostime()
-            self.estimated_pose.child_frame_id = "base_link"
-            self.estimated_pose.pose.pose.position.x = self.x_est[0]
-            self.estimated_pose.pose.pose.position.y = self.x_est[1]
-            q = self.get_quaternion_from_yaw(self.x_est[2])
-            self.estimated_pose.pose.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
-            self.estimated_pose_pub.publish(self.estimated_pose);
+            self.publish_estimated_pose(self.x_est, self.p_est)
 
     def get_observation_from_landmark_msg(self, landmark):
         z = []
@@ -236,6 +229,27 @@ class ObjectDetectionBasedLandmarkSLAM:
     def get_quaternion_from_yaw(self, yaw):
         q = tf.transformations.quaternion_from_euler(0, 0, yaw[0])
         return q
+
+    def publish_estimated_pose(self, x, p):
+        self.estimated_pose.header.frame_id = "world"
+        self.estimated_pose.header.stamp = rospy.get_rostime()
+        self.estimated_pose.child_frame_id = "base_link"
+        self.estimated_pose.pose.pose.position.x = x[0]
+        self.estimated_pose.pose.pose.position.y = x[1]
+        q = self.get_quaternion_from_yaw(x[2])
+        self.estimated_pose.pose.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
+        '''
+        self.estimated_pose.pose.covariance[0] = p[0, 0]
+        self.estimated_pose.pose.covariance[1] = p[0, 1]
+        self.estimated_pose.pose.covariance[5] = p[0, 2]
+        self.estimated_pose.pose.covariance[6] = p[1, 0]
+        self.estimated_pose.pose.covariance[7] = p[1, 1]
+        self.estimated_pose.pose.covariance[11] = p[1, 2]
+        self.estimated_pose.pose.covariance[30] = p[2, 0]
+        self.estimated_pose.pose.covariance[31] = p[2, 1]
+        self.estimated_pose.pose.covariance[35] = p[2, 2]
+        '''
+        self.estimated_pose_pub.publish(self.estimated_pose);
 
 if __name__ == '__main__':
     odlm_slam = ObjectDetectionBasedLandmarkSLAM()
