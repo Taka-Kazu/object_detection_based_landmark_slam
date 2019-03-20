@@ -34,6 +34,8 @@ class ObjectDetectionBasedLandmarkSLAM:
         self.estimated_pose_pub = rospy.Publisher('/estimated_pose', Odometry, queue_size=1)
         self.marker_pub = rospy.Publisher('/error_ellipse', MarkerArray, queue_size=1)
 
+        self._odom_sub = rospy.Subscriber('/odom/sim/noise', Odometry, self.odom_callback)
+
         self.last_time = rospy.get_time()
         self.current_pose = None
         self.last_pose = None
@@ -60,20 +62,23 @@ class ObjectDetectionBasedLandmarkSLAM:
 
     def ekf_slam(self, x_est, p_est, u, z, dt):
         print "start ekf_slam"
-        # Predict
+
+        print x_est[0:self.ROBOT_STATE_SIZE]
+        print p_est[0:self.ROBOT_STATE_SIZE, 0:self.ROBOT_STATE_SIZE]
+
+        x_est, p_est = self.predict(x_est, p_est, u, dt)
+        x_est, p_est = self.update(x_est, p_est, u, z, dt)
+
+        return x_est, p_est
+
+    def predict(self, x_est, p_est, u, dt):
         S_ = self.ROBOT_STATE_SIZE
-        print x_est[0:S_]
-        print p_est[0:S_, 0:S_]
-        '''
-        print u
-        print z
-        print dt
-        '''
         x_est[0:S_] = self.move(x_est[0:S_], u, dt)
         jf = self.get_jacobian_f(x_est[0:S_], u, dt)
         p_est[0:S_, 0:S_] = np.dot(np.dot(jf, p_est[0:S_, 0:S_]), jf.T) + self.Q
+        return x_est, p_est
 
-        # Update
+    def update(self, x_est, p_est, u, z, dt):
         print(str(len(z)) + " landmarks detected")
         for iz in range(len(z)):  # for each observation
             minid = self.get_correspond_landmark_index(x_est, p_est, z[iz, 0:2])
@@ -95,7 +100,6 @@ class ObjectDetectionBasedLandmarkSLAM:
             p_est = np.dot((np.eye(len(x_est)) - np.dot(K, H)), p_est)
 
         x_est[2] = self.pi_2_pi(x_est[2])
-
         return x_est, p_est
 
     def get_jacobian_f(self, x, u, dt):
@@ -285,6 +289,12 @@ class ObjectDetectionBasedLandmarkSLAM:
         m.scale.x = a
         m.scale.y = b
         return m
+
+    def odom_callback(self, odom):
+        pass
+
+    def landmark_callback(self, landmark):
+        pass
 
 if __name__ == '__main__':
     odlm_slam = ObjectDetectionBasedLandmarkSLAM()
