@@ -3,6 +3,7 @@
 
 import numpy as np
 import math
+import threading
 
 import rospy
 import tf
@@ -41,6 +42,9 @@ class ObjectDetectionBasedLandmarkSLAM:
         self.p_est = np.eye(self.ROBOT_STATE_SIZE)
         self.estimated_pose = Odometry()
         self.error_ellipse = MarkerArray()
+
+        self.lock = threading.Lock()
+
         print 'object detection based landmark SLAM'
 
         self.send_transform(self.x_est)
@@ -58,6 +62,7 @@ class ObjectDetectionBasedLandmarkSLAM:
         return x
 
     def predict(self, x_est, p_est, u, dt):
+        print "=== predict ==="
         print x_est[0:self.ROBOT_STATE_SIZE]
         print p_est[0:self.ROBOT_STATE_SIZE, 0:self.ROBOT_STATE_SIZE]
         S_ = self.ROBOT_STATE_SIZE
@@ -65,9 +70,12 @@ class ObjectDetectionBasedLandmarkSLAM:
         jf = self.get_jacobian_f(x_est[0:S_], u, dt)
         p_est[0:S_, 0:S_] = np.dot(np.dot(jf, p_est[0:S_, 0:S_]), jf.T) + self.Q
         x_est[2] = self.pi_2_pi(x_est[2])
+        print x_est[0:self.ROBOT_STATE_SIZE]
+        print p_est[0:self.ROBOT_STATE_SIZE, 0:self.ROBOT_STATE_SIZE]
         return x_est, p_est
 
     def update(self, x_est, p_est, z):
+        print "=== update ==="
         print(str(len(z)) + " landmarks detected")
         for iz in range(len(z)):  # for each observation
             minid = self.get_correspond_landmark_index(x_est, p_est, z[iz, 0:2])
@@ -89,6 +97,8 @@ class ObjectDetectionBasedLandmarkSLAM:
             p_est = np.dot((np.eye(len(x_est)) - np.dot(K, H)), p_est)
 
         x_est[2] = self.pi_2_pi(x_est[2])
+        print x_est[0:self.ROBOT_STATE_SIZE]
+        print p_est[0:self.ROBOT_STATE_SIZE, 0:self.ROBOT_STATE_SIZE]
         return x_est, p_est
 
     def get_jacobian_f(self, x, u, dt):
@@ -260,31 +270,33 @@ class ObjectDetectionBasedLandmarkSLAM:
         return m
 
     def odom_callback(self, odom):
-        current_time = rospy.get_time()
-        dt = current_time - self.last_time
-        self.last_time = current_time
-        self.last_pose = self.current_pose
-        self.current_pose = odom.pose.pose
-        if(self.last_pose is not None):
-            dx = self.current_pose.position.x - self.last_pose.position.x
-            dy = self.current_pose.position.y - self.last_pose.position.y
-            d = math.sqrt(dx * dx + dy * dy)
-            v = d / dt
-            _, _, current_yaw = tf.transformations.euler_from_quaternion((self.current_pose.orientation.x, self.current_pose.orientation.y, self.current_pose.orientation.z, self.current_pose.orientation.w))
-            _, _, last_yaw = tf.transformations.euler_from_quaternion((self.last_pose.orientation.x, self.last_pose.orientation.y, self.last_pose.orientation.z, self.last_pose.orientation.w))
-            omega = (current_yaw - last_yaw) / dt
-            u = np.array([[v, omega]]).T
-            self.x_est, self.p_est = self.predict(self.x_est, self.p_est, u, dt)
-            self.publish_estimated_pose(self.x_est, self.p_est)
-            self.publish_error_ellipse_markers(self.x_est, self.p_est)
+        with self.lock:
+            current_time = rospy.get_time()
+            dt = current_time - self.last_time
+            self.last_time = current_time
+            self.last_pose = self.current_pose
+            self.current_pose = odom.pose.pose
+            if(self.last_pose is not None):
+                dx = self.current_pose.position.x - self.last_pose.position.x
+                dy = self.current_pose.position.y - self.last_pose.position.y
+                d = math.sqrt(dx * dx + dy * dy)
+                v = d / dt
+                _, _, current_yaw = tf.transformations.euler_from_quaternion((self.current_pose.orientation.x, self.current_pose.orientation.y, self.current_pose.orientation.z, self.current_pose.orientation.w))
+                _, _, last_yaw = tf.transformations.euler_from_quaternion((self.last_pose.orientation.x, self.last_pose.orientation.y, self.last_pose.orientation.z, self.last_pose.orientation.w))
+                omega = (current_yaw - last_yaw) / dt
+                u = np.array([[v, omega]]).T
+                self.x_est, self.p_est = self.predict(self.x_est, self.p_est, u, dt)
+                self.publish_estimated_pose(self.x_est, self.p_est)
+                self.publish_error_ellipse_markers(self.x_est, self.p_est)
 
     def landmark_callback(self, lm):
-        z = self.get_observation_from_landmark_msg(lm)
-        self.x_est, self.p_est = self.update(self.x_est, self.p_est, z)
-        '''
-        self.publish_estimated_pose(self.x_est, self.p_est)
-        self.publish_error_ellipse_markers(self.x_est, self.p_est)
-        '''
+        with self.lock:
+            z = self.get_observation_from_landmark_msg(lm)
+            self.x_est, self.p_est = self.update(self.x_est, self.p_est, z)
+            '''
+            self.publish_estimated_pose(self.x_est, self.p_est)
+            self.publish_error_ellipse_markers(self.x_est, self.p_est)
+            '''
 
 if __name__ == '__main__':
     odlm_slam = ObjectDetectionBasedLandmarkSLAM()
