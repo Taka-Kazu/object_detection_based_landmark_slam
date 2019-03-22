@@ -20,8 +20,8 @@ CHI_2 = 9.21934 # X^2, 99%
 
 class ObjectDetectionBasedLandmarkSLAM:
     def __init__(self):
-        self.Q = np.diag([0.5, 0.5, np.radians(30.0)])**2
-        self.R = np.diag([1.0, np.radians(10.0)])**2 # input noise
+        self.Q = np.diag([0.5, 0.5, np.radians(5.0)])**2
+        self.R = np.diag([0.3, 0.3])**2 # input noise
         self.LIMIT_MAHALANOBIS_DISTANCE = 2.0
         self.ROBOT_STATE_SIZE = 3 # x, y, yaw
         self.LANDMARK_STATE_SIZE = 2 # x, y
@@ -169,7 +169,7 @@ class ObjectDetectionBasedLandmarkSLAM:
         e = (z - zp).T
         e[1] = self.pi_2_pi(e[1])
         H = self.get_jacobian_h(delta, index + 1, self.calculate_landmark_num(x_est))
-        S = np.dot(np.dot(H, p_est), H.T) + self.Q[0:2, 0:2]
+        S = np.dot(np.dot(H, p_est), H.T) + self.R
         return e, S, H
 
     def calculate_error_ellipse(self, P):
