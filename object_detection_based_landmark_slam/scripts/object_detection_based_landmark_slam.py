@@ -22,7 +22,7 @@ class ObjectDetectionBasedLandmarkSLAM:
     def __init__(self):
         self.Q = np.diag([0.5, 0.5, np.radians(5.0)])**2
         self.R = np.diag([0.3, 0.3])**2 # input noise
-        self.LIMIT_MAHALANOBIS_DISTANCE = 2.0
+        self.LIMIT_MAHALANOBIS_DISTANCE = 0.102587 # 2DoF, 95%
         self.ROBOT_STATE_SIZE = 3 # x, y, yaw
         self.LANDMARK_STATE_SIZE = 2 # x, y
 
