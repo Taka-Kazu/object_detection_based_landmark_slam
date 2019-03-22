@@ -287,12 +287,12 @@ class ObjectDetectionBasedLandmarkSLAM:
                 u = np.array([[v, omega]]).T
                 self.x_est, self.p_est = self.predict(self.x_est, self.p_est, u, dt)
                 self.publish_estimated_pose(self.x_est, self.p_est)
-                self.publish_error_ellipse_markers(self.x_est, self.p_est)
 
     def landmark_callback(self, lm):
         with self.lock:
             z = self.get_observation_from_landmark_msg(lm)
             self.x_est, self.p_est = self.update(self.x_est, self.p_est, z)
+            self.publish_error_ellipse_markers(self.x_est, self.p_est)
             '''
             self.publish_estimated_pose(self.x_est, self.p_est)
             self.publish_error_ellipse_markers(self.x_est, self.p_est)
